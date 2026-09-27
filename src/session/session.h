@@ -352,6 +352,7 @@ class Session {
   // If the command is a shortcut to select a candidate from a list,
   // Process it and return true, otherwise return false.
   bool MaybeSelectCandidate(mozc::commands::Command* command);
+  bool MaybeCommitSuggestionByNumber(mozc::commands::Command* command);
 
   // Fill command's output according to the current state.
   void OutputFromState(mozc::commands::Command* command);

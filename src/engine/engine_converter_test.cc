@@ -2561,6 +2561,29 @@ TEST_F(EngineConverterTest, ReloadConfig) {
   }
 }
 
+TEST_F(EngineConverterTest, SuggestionShortcutsAreNumbered) {
+  auto mock_converter = std::make_shared<MockConverter>();
+  EngineConverter converter(mock_converter, request_, config_);
+  Segments segments;
+  SetAiueo(&segments);
+  composer_->InsertCharacterPreedit("あいうえお");
+  FillT13Ns(&segments, composer_.get());
+  EXPECT_CALL(*mock_converter, StartPrediction(_, _))
+      .WillOnce(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  converter.set_selection_shortcut(config::Config::NO_SHORTCUT);
+  EXPECT_TRUE(converter.Suggest(*composer_, Context::default_instance()));
+  converter.SetCandidateListVisible(true);
+
+  commands::Output output;
+  converter.FillOutput(*composer_, &output);
+  ASSERT_TRUE(output.has_candidate_window());
+  const commands::CandidateWindow& candidate_window = output.candidate_window();
+  EXPECT_EQ(candidate_window.category(), commands::SUGGESTION);
+  EXPECT_EQ(candidate_window.candidate(0).annotation().shortcut(), "1");
+  EXPECT_EQ(candidate_window.candidate(1).annotation().shortcut(), "2");
+}
+
 TEST_F(EngineConverterTest, OutputAllCandidateWords) {
   auto mock_converter = std::make_shared<MockConverter>();
   EngineConverter converter(mock_converter, request_, config_);
