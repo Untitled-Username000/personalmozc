@@ -1455,6 +1455,65 @@ bool Session::MaybeSelectCandidate(commands::Command* command) {
   return context_->mutable_converter()->CandidateMoveToShortcut(shortcut);
 }
 
+bool Session::MaybeCommitSuggestionByNumber(commands::Command* command) {
+  if (context_->state() != ImeContext::COMPOSITION ||
+      !context_->converter().CheckState(EngineConverterInterface::SUGGESTION)) {
+    return false;
+  }
+  // When using special romaji table (== The key event is from a virtual
+  // keyboard), don't consume it as a shortcut selection operation.
+  if (context_->GetRequest().special_romanji_table() !=
+      commands::Request::DEFAULT_TABLE) {
+    return false;
+  }
+
+  commands::KeyEvent normalized_keyevent;
+  KeyEventUtil::NormalizeModifiers(command->input().key(), &normalized_keyevent);
+  const char shortcut = static_cast<char>(normalized_keyevent.key_code());
+  if (shortcut < '1' || shortcut > '9') {
+    return false;
+  }
+  const size_t index = shortcut - '1';
+
+  commands::Output output;
+  context_->converter().FillOutput(context_->composer(), &output);
+  if (!output.has_candidate_window() ||
+      output.candidate_window().category() != commands::SUGGESTION ||
+      index >= output.candidate_window().candidate_size()) {
+    return false;
+  }
+  const int candidate_id = output.candidate_window().candidate(index).id();
+
+  PushUndoContext();
+  size_t consumed_key_size = 0;
+  if (!context_->mutable_converter()->CommitSuggestionById(
+          candidate_id, context_->composer(), command->input().context(),
+          &consumed_key_size)) {
+    return false;
+  }
+  if (consumed_key_size < context_->composer().GetLength()) {
+    // partial suggestion was committed.
+    context_->mutable_composer()->DeleteRange(0, consumed_key_size);
+    // Don't clear the undo context, which we've just updated.
+    MoveCursorToEndInternal(command, false);
+    // Copy the previous output for Undo.
+    *context_->mutable_output() = command->output();
+    return true;
+  }
+
+  if (!context_->converter().IsActive()) {
+    SetSessionState(ImeContext::PRECOMPOSITION, context_.get());
+    if (context_->GetRequest().zero_query_suggestion()) {
+      Suggest(command->input());
+    }
+  }
+
+  Output(command);
+  // Copy the previous output for Undo.
+  *context_->mutable_output() = command->output();
+  return true;
+}
+
 void Session::set_client_capability(commands::Capability capability) {
   *context_->mutable_client_capability() = std::move(capability);
 }
@@ -1514,6 +1573,11 @@ bool Session::InsertCharacter(commands::Command* command) {
   }
 
   command->mutable_output()->set_consumed(true);
+
+  // Handle number keys selecting and committing a suggestion candidate.
+  if (MaybeCommitSuggestionByNumber(command)) {
+    return true;
+  }
 
   // Handle shortcut keys selecting a candidate from a list.
   if (MaybeSelectCandidate(command)) {

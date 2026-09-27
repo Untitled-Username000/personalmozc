@@ -4023,6 +4023,71 @@ TEST_F(SessionTest, ShortcutFromVK) {
   EXPECT_EQ(GetComposition(command), "１");
 }
 
+TEST_F(SessionTest, SuggestionNumberShortcutCommitsImmediately) {
+  config::Config config;
+  config.set_selection_shortcut(config::Config::NO_SHORTCUT);
+
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  session.SetConfig(config);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  SetAiueo(&segments);
+  const ConversionRequest request = CreateConversionRequest(session);
+  FillT13Ns(request, &segments);
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(), commands::SUGGESTION);
+  EXPECT_EQ(command.output().candidate_window().candidate(0).annotation().shortcut(),
+            "1");
+  EXPECT_EQ(command.output().candidate_window().candidate(1).annotation().shortcut(),
+            "2");
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("2", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("アイウエオ", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, SuggestionNumberShortcutOutOfRangeFallsBackToInput) {
+  config::Config config;
+  config.set_selection_shortcut(config::Config::NO_SHORTCUT);
+
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  session.SetConfig(config);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  SetAiueo(&segments);
+  const ConversionRequest request = CreateConversionRequest(session);
+  FillT13Ns(request, &segments);
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(), commands::SUGGESTION);
+  ASSERT_EQ(command.output().candidate_window().candidate_size(), 2);
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("9", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_FALSE(command.output().has_result());
+  EXPECT_FALSE(GetComposition(command).empty());
+}
+
 TEST_F(SessionTest, NumpadKey) {
   MockEngine engine;
   std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);

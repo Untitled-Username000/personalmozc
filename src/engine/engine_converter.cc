@@ -1713,7 +1713,10 @@ void EngineConverter::FillCandidateWindow(
                               candidate_window);
 
   // Shortcut keys
-  if (CheckState(PREDICTION | CONVERSION)) {
+  if (CheckState(SUGGESTION)) {
+    constexpr absl::string_view kShortcut123456789 = "123456789";
+    output::FillShortcuts(kShortcut123456789, candidate_window);
+  } else if (CheckState(PREDICTION | CONVERSION)) {
     output::FillShortcuts(GetCandidateShortcuts(selection_shortcut_),
                           candidate_window);
   }
