@@ -1,5 +1,5 @@
 ## Policy on Vocabulary and Conversion Results
- 
+  
 The Mozc Project establishes the following policy regarding the construction of
 Japanese language models and vocabularies (dictionary data).
 
