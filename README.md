@@ -1,3 +1,10 @@
+# AI SLOP ALERT!!!
+
+I had modification done that let's me use the 1-9 number keys as a shortcut to apply suggestions immediately instead of pressing the menu tab and then selecting the word I want, effectively saving a few key presses down to one.
+
+Use it as it is, I offer no guarantees, it can be downloaded from actions.
+
+
 [Mozc - a Japanese Input Method Editor designed for multi-platform](https://github.com/google/mozc)
 ===================================
 
