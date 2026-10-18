@@ -736,6 +736,24 @@ bool Session::SendKeyCompositionState(commands::Command* command) {
     case keymap::CompositionState::PREDICT_AND_CONVERT:
       return PredictAndConvert(command);
 
+    case keymap::CompositionState::CONVERT_NEXT:
+      // The space key keeps its conventional behavior for alphanumeric
+      // compositions: a space is inserted into the composition instead of
+      // moving the focus in the candidate list.  See also Session::Convert.
+      if (IsSpaceKeyOnAsciiComposition(command)) {
+        return Convert(command);
+      }
+      return ConvertNext(command);
+
+    case keymap::CompositionState::CONVERT_PREV:
+      return ConvertPrev(command);
+
+    case keymap::CompositionState::CONVERT_NEXT_PAGE:
+      return ConvertNextPage(command);
+
+    case keymap::CompositionState::CONVERT_PREV_PAGE:
+      return ConvertPrevPage(command);
+
     case keymap::CompositionState::DEL:
       return Delete(command);
 
@@ -1477,8 +1495,12 @@ bool Session::MaybeCommitSuggestionByNumber(commands::Command* command) {
 
   commands::Output output;
   context_->converter().FillOutput(context_->composer(), &output);
+  // While typing, the candidate window is shown as the prediction style
+  // candidate list (commands::PREDICTION), while mobile environments show the
+  // legacy suggestion list (commands::SUGGESTION).
   if (!output.has_candidate_window() ||
-      output.candidate_window().category() != commands::SUGGESTION ||
+      (output.candidate_window().category() != commands::SUGGESTION &&
+       output.candidate_window().category() != commands::PREDICTION) ||
       index >= output.candidate_window().candidate_size()) {
     return false;
   }
@@ -1689,6 +1711,20 @@ bool Session::IsFullWidthInsertSpace(const commands::Input& input) const {
   }
 
   return is_full_width;
+}
+
+bool Session::IsSpaceKeyOnAsciiComposition(
+    const commands::Command* command) const {
+  const commands::KeyEvent& key = command->input().key();
+  if (!key.has_special_key() ||
+      key.special_key() != commands::KeyEvent::SPACE) {
+    return false;
+  }
+  // Mirror the condition used in Session::Convert.
+  const transliteration::TransliterationType input_mode =
+      context_->composer().GetInputMode();
+  return input_mode == transliteration::HALF_ASCII ||
+         input_mode == transliteration::FULL_ASCII;
 }
 
 bool Session::InsertSpace(commands::Command* command) {
@@ -2710,7 +2746,11 @@ bool Session::ConvertNext(commands::Command* command) {
 }
 
 bool Session::ConvertNextPage(commands::Command* command) {
-  if (!(context_->state() & (ImeContext::CONVERSION))) {
+  if (!(context_->state() & (ImeContext::CONVERSION | ImeContext::COMPOSITION)) ||
+      !context_->converter().CheckState(
+          EngineConverterInterface::SUGGESTION |
+          EngineConverterInterface::PREDICTION |
+          EngineConverterInterface::CONVERSION)) {
     return DoNothing(command);
   }
   command->mutable_output()->set_consumed(true);
@@ -2727,7 +2767,11 @@ bool Session::ConvertPrev(commands::Command* command) {
 }
 
 bool Session::ConvertPrevPage(commands::Command* command) {
-  if (!(context_->state() & (ImeContext::CONVERSION))) {
+  if (!(context_->state() & (ImeContext::CONVERSION | ImeContext::COMPOSITION)) ||
+      !context_->converter().CheckState(
+          EngineConverterInterface::SUGGESTION |
+          EngineConverterInterface::PREDICTION |
+          EngineConverterInterface::CONVERSION)) {
     return DoNothing(command);
   }
   command->mutable_output()->set_consumed(true);

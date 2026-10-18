@@ -302,6 +302,12 @@ class Session {
   // the current mode will be considered.
   bool IsFullWidthInsertSpace(const mozc::commands::Input& input) const;
 
+  // Returns true if the command is a space key event on an alphanumeric
+  // composition.  Such a space is treated as a whitespace character rather
+  // than a candidate navigation key.
+  bool IsSpaceKeyOnAsciiComposition(
+      const mozc::commands::Command* command) const;
+
   bool EditCancelOnPasswordField(mozc::commands::Command* command);
 
   bool ConvertToTransliteration(

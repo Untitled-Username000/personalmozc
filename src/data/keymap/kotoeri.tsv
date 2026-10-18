@@ -136,6 +136,14 @@ Precomposition	ON	IMEOn
 Precomposition	Shift Space	InsertAlternateSpace
 Precomposition	Space	InsertSpace
 Prediction	Ctrl Delete	DeleteSelectedCandidate
-Suggestion	Ctrl n	PredictAndConvert
-Suggestion	Down	PredictAndConvert
+Suggestion	Ctrl n	ConvertNext
+Suggestion	Ctrl p	ConvertPrev
+Suggestion	Down	ConvertNext
+Suggestion	PageDown	ConvertNextPage
+Suggestion	PageUp	ConvertPrevPage
+Suggestion	Shift Down	ConvertNextPage
 Suggestion	Shift Enter	CommitFirstSuggestion
+Suggestion	Shift Up	ConvertPrevPage
+Suggestion	Space	ConvertNext
+Suggestion	Tab	ConvertNext
+Suggestion	Up	ConvertPrev

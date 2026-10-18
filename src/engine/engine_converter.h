@@ -328,8 +328,17 @@ class EngineConverter : public EngineConverterInterface {
   int GetCandidateIndexForConverter(size_t segment_index) const;
 
   // If focus_id is pointing to the last of suggestions,
-  // call StartPrediction().
+  // call StartPrediction() to load more candidates.
+  // The candidate list is expandable both in PREDICTION state (the candidate
+  // menu which is usually expanded by the Tab key) and in SUGGESTION state
+  // (the candidate menu which is always displayed while typing).
   void MaybeExpandPrediction(const composer::Composer& composer);
+
+  // Loads additional candidates for the SUGGESTION state by issuing a new
+  // prediction request with the previous suggestions.  Unlike Predict(), the
+  // state is kept as SUGGESTION so that typing keeps refining the composition.
+  // Returns true if the candidate list may have grown.
+  bool ExpandSuggestion(const composer::Composer& composer);
 
   // Returns the value of candidate to be used by the converter.
   std::string GetSelectedCandidateValue(size_t segment_index) const;

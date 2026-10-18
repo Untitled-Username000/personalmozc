@@ -586,6 +586,12 @@ void KeyMapManager::InitCommandData() {
                              CompositionState::CONVERT_WITHOUT_HISTORY);
   RegisterCompositionCommand("PredictAndConvert",
                              CompositionState::PREDICT_AND_CONVERT);
+  RegisterCompositionCommand("ConvertNext", CompositionState::CONVERT_NEXT);
+  RegisterCompositionCommand("ConvertPrev", CompositionState::CONVERT_PREV);
+  RegisterCompositionCommand("ConvertNextPage",
+                             CompositionState::CONVERT_NEXT_PAGE);
+  RegisterCompositionCommand("ConvertPrevPage",
+                             CompositionState::CONVERT_PREV_PAGE);
   RegisterCompositionCommand("ConvertToHiragana",
                              CompositionState::CONVERT_TO_HIRAGANA);
   RegisterCompositionCommand("ConvertToFullKatakana",

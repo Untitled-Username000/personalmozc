@@ -1635,7 +1635,10 @@ TEST_F(EngineConverterTest, CommitConvertedBracketPairText) {
         output.candidate_window();
     EXPECT_EQ(candidate_window.size(), 2);
     EXPECT_EQ(candidate_window.candidate(0).value(), "（）");
-    EXPECT_FALSE(candidate_window.has_focused_index());
+    // The suggestion candidate list is focused so that it can be navigated
+    // while typing.
+    EXPECT_TRUE(candidate_window.has_focused_index());
+    EXPECT_EQ(candidate_window.focused_index(), 0);
     EXPECT_SELECTED_CANDIDATE_INDICES_EQ(converter, expected_indices);
   }
 
@@ -1817,7 +1820,10 @@ TEST_F(EngineConverterTest, CommitSuggestionByIndex) {
         output.candidate_window();
     EXPECT_EQ(candidate_window.size(), 2);
     EXPECT_EQ(candidate_window.candidate(0).value(), kChars_Mozukusu);
-    EXPECT_FALSE(candidate_window.has_focused_index());
+    // The suggestion candidate list is focused so that it can be navigated
+    // while typing.
+    EXPECT_TRUE(candidate_window.has_focused_index());
+    EXPECT_EQ(candidate_window.focused_index(), 0);
     EXPECT_SELECTED_CANDIDATE_INDICES_EQ(converter, expected_indices);
   }
 
@@ -2057,21 +2063,19 @@ TEST_F(EngineConverterTest, SuggestAndPredict) {
     EXPECT_TRUE(output.has_preedit());
     EXPECT_TRUE(output.has_candidate_window());
     EXPECT_TRUE(output.candidate_window().has_footer());
-#if defined(CHANNEL_DEV) && defined(GOOGLE_JAPANESE_INPUT_BUILD)
+    // The suggestion is displayed as a focused prediction menu, so the footer
+    // shows the candidate index and the logo instead of the "Tabキーで選択"
+    // label.
     EXPECT_FALSE(output.candidate_window().footer().has_label());
-    EXPECT_TRUE(output.candidate_window().footer().has_sub_label());
-#else   // CHANNEL_DEV && GOOGLE_JAPANESE_INPUT_BUILD
-    EXPECT_TRUE(output.candidate_window().footer().has_label());
-    EXPECT_FALSE(output.candidate_window().footer().has_sub_label());
-#endif  // CHANNEL_DEV && GOOGLE_JAPANESE_INPUT_BUILD
-    EXPECT_FALSE(output.candidate_window().footer().index_visible());
-    EXPECT_FALSE(output.candidate_window().footer().logo_visible());
+    EXPECT_TRUE(output.candidate_window().footer().index_visible());
+    EXPECT_TRUE(output.candidate_window().footer().logo_visible());
 
     const commands::CandidateWindow& candidate_window =
         output.candidate_window();
     EXPECT_EQ(candidate_window.size(), 2);
     EXPECT_EQ(candidate_window.candidate(0).value(), kChars_Mozukusu);
-    EXPECT_FALSE(candidate_window.has_focused_index());
+    EXPECT_TRUE(candidate_window.has_focused_index());
+    EXPECT_EQ(candidate_window.focused_index(), 0);
   }
 
   // Action 2. Predict()
@@ -2602,9 +2606,178 @@ TEST_F(EngineConverterTest, SuggestionShortcutsAreNumbered) {
   converter.FillOutput(*composer_, &output);
   ASSERT_TRUE(output.has_candidate_window());
   const commands::CandidateWindow& candidate_window = output.candidate_window();
-  EXPECT_EQ(candidate_window.category(), commands::SUGGESTION);
+  // The suggestion is displayed as a focused prediction menu on desktop.
+  EXPECT_EQ(candidate_window.category(), commands::PREDICTION);
   EXPECT_EQ(candidate_window.candidate(0).annotation().shortcut(), "1");
   EXPECT_EQ(candidate_window.candidate(1).annotation().shortcut(), "2");
+}
+
+TEST_F(EngineConverterTest, SuggestCandidateNavigationWhileTyping) {
+  auto mock_converter = std::make_shared<MockConverter>();
+  EngineConverter converter(mock_converter, request_, config_);
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key(kChars_Mo);
+    constexpr std::array<const char*, 11> kCandidates = {
+        "もずく", "ももんが", "モンドリアン", "もずくす", "もち", "もったいない",
+        "もともと", "もみじ", "もやし", "もり", "もず"};
+    for (const char* value : kCandidates) {
+      converter::Candidate* candidate = segment->add_candidate();
+      candidate->value = value;
+      candidate->content_key = value;
+    }
+  }
+  composer_->InsertCharacterPreedit(kChars_Mo);
+
+  EXPECT_CALL(*mock_converter, StartPrediction(_, _))
+      .WillOnce(DoAll(SetArgPointee<1>(segments), Return(true)));
+  EXPECT_TRUE(converter.Suggest(*composer_, Context::default_instance()));
+  Mock::VerifyAndClearExpectations(&mock_converter);
+
+  EXPECT_TRUE(IsCandidateListVisible(converter));
+  EXPECT_TRUE(converter.IsActive());
+  // The state stays SUGGESTION so that typing keeps refining the composition.
+  EXPECT_EQ(GetState(converter), EngineConverterInterface::SUGGESTION);
+
+  // CandidateNext() focuses the next candidate while typing.
+  EXPECT_CALL(*mock_converter, FocusSegmentValue(_, 0, 1))
+      .WillOnce(Return(true));
+  converter.CandidateNext(*composer_);
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetCandidateList(converter).focused_index(), 1);
+
+  // CandidatePrev() focuses the previous candidate.
+  EXPECT_CALL(*mock_converter, FocusSegmentValue(_, 0, 0))
+      .WillOnce(Return(true));
+  converter.CandidatePrev();
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetCandidateList(converter).focused_index(), 0);
+
+  // CandidateNextPage() moves the focus to the next page.  Page navigation
+  // only uses the already loaded candidates.
+  EXPECT_CALL(*mock_converter, StartPredictionWithPreviousSuggestion(_, _, _))
+      .Times(0);
+  EXPECT_CALL(*mock_converter, FocusSegmentValue(_, 0, 9))
+      .WillOnce(Return(true));
+  converter.CandidateNextPage();
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetCandidateList(converter).focused_index(), 9);
+
+  {  // The composition stays displayed instead of the focused candidate.
+    commands::Output output;
+    converter.FillOutput(*composer_, &output);
+    EXPECT_FALSE(output.has_result());
+    EXPECT_TRUE(output.has_preedit());
+    const commands::Preedit& preedit = output.preedit();
+    ASSERT_EQ(preedit.segment_size(), 1);
+    EXPECT_EQ(preedit.segment(0).value(), kChars_Mo);
+
+    ASSERT_TRUE(output.has_candidate_window());
+    const commands::CandidateWindow& candidate_window =
+        output.candidate_window();
+    EXPECT_EQ(candidate_window.category(), commands::PREDICTION);
+    EXPECT_EQ(candidate_window.size(), 11);
+    EXPECT_TRUE(candidate_window.has_focused_index());
+    EXPECT_EQ(candidate_window.focused_index(), 9);
+    // The focused page starts at the 10th candidate.
+    ASSERT_EQ(candidate_window.candidate_size(), 2);
+    EXPECT_EQ(candidate_window.candidate(0).index(), 9);
+    EXPECT_EQ(candidate_window.candidate(0).value(), "もり");
+    EXPECT_EQ(candidate_window.candidate(1).value(), "もず");
+  }
+
+  // CandidatePrevPage() moves the focus back to the first page.
+  EXPECT_CALL(*mock_converter, FocusSegmentValue(_, 0, 0))
+      .WillOnce(Return(true));
+  converter.CandidatePrevPage();
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetCandidateList(converter).focused_index(), 0);
+  EXPECT_EQ(GetState(converter), EngineConverterInterface::SUGGESTION);
+}
+
+TEST_F(EngineConverterTest, SuggestExpandsCandidatesOnCandidateNextAtEnd) {
+  auto mock_converter = std::make_shared<MockConverter>();
+  EngineConverter converter(mock_converter, request_, config_);
+  Segments suggestion_segments;
+  {
+    Segment* segment = suggestion_segments.add_segment();
+    segment->set_key(kChars_Mo);
+    converter::Candidate* candidate = segment->add_candidate();
+    candidate->value = kChars_Mozukusu;
+    candidate->content_key = kChars_Mozukusu;
+    candidate = segment->add_candidate();
+    candidate->value = kChars_Momonga;
+    candidate->content_key = kChars_Momonga;
+  }
+  composer_->InsertCharacterPreedit(kChars_Mo);
+
+  EXPECT_CALL(*mock_converter, StartPrediction(_, _))
+      .WillOnce(DoAll(SetArgPointee<1>(suggestion_segments), Return(true)));
+  EXPECT_TRUE(converter.Suggest(*composer_, Context::default_instance()));
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetCandidateList(converter).size(), 2);
+
+  // Move the focus to the last candidate.
+  EXPECT_CALL(*mock_converter, FocusSegmentValue(_, 0, 1))
+      .WillOnce(Return(true));
+  converter.CandidateNext(*composer_);
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetCandidateList(converter).focused_index(), 1);
+
+  // CandidateNext() at the last candidate asks for more candidates.  The
+  // already displayed candidates are passed as the previous suggestion and
+  // the state stays SUGGESTION.
+  const Segments expanded_segments = [&]() {
+    Segments segments = suggestion_segments;
+    converter::Candidate* candidate =
+        segments.mutable_segment(0)->add_candidate();
+    candidate->value = "モンドリアン";
+    candidate->content_key = "もんどりあん";
+    return segments;
+  }();
+  EXPECT_CALL(*mock_converter,
+              StartPredictionWithPreviousSuggestion(
+                  _, EqualsSegment(suggestion_segments.conversion_segment(0)),
+                  _))
+      .WillOnce(DoAll(SetArgPointee<2>(expanded_segments), Return(true)));
+  EXPECT_CALL(*mock_converter, FocusSegmentValue(_, 0, 2))
+      .WillOnce(Return(true));
+  converter.CandidateNext(*composer_);
+  Mock::VerifyAndClearExpectations(&mock_converter);
+
+  EXPECT_EQ(GetState(converter), EngineConverterInterface::SUGGESTION);
+  const CandidateList& candidate_list = GetCandidateList(converter);
+  EXPECT_EQ(candidate_list.size(), 3);
+  EXPECT_EQ(candidate_list.focused_index(), 2);
+
+  {  // The composition keeps being displayed, not the focused candidate.
+    commands::Output output;
+    converter.FillOutput(*composer_, &output);
+    EXPECT_FALSE(output.has_result());
+    EXPECT_TRUE(output.has_preedit());
+    const commands::Preedit& preedit = output.preedit();
+    ASSERT_EQ(preedit.segment_size(), 1);
+    EXPECT_EQ(preedit.segment(0).value(), kChars_Mo);
+
+    ASSERT_TRUE(output.has_candidate_window());
+    const commands::CandidateWindow& candidate_window =
+        output.candidate_window();
+    EXPECT_EQ(candidate_window.category(), commands::PREDICTION);
+    EXPECT_EQ(candidate_window.size(), 3);
+    EXPECT_TRUE(candidate_window.has_focused_index());
+    EXPECT_EQ(candidate_window.focused_index(), 2);
+    EXPECT_EQ(candidate_window.candidate(2).value(), "モンドリアン");
+  }
+
+  // Typing more characters keeps refining the composition.
+  composer_->InsertCharacterPreedit("ず");
+  EXPECT_CALL(*mock_converter, StartPrediction(_, _))
+      .WillOnce(DoAll(SetArgPointee<1>(suggestion_segments), Return(true)));
+  EXPECT_TRUE(converter.Suggest(*composer_, Context::default_instance()));
+  Mock::VerifyAndClearExpectations(&mock_converter);
+  EXPECT_EQ(GetState(converter), EngineConverterInterface::SUGGESTION);
+  EXPECT_EQ(GetCandidateList(converter).focused_index(), 0);
 }
 
 TEST_F(EngineConverterTest, OutputAllCandidateWords) {
@@ -2914,7 +3087,10 @@ TEST_F(EngineConverterTest, Issue1948334) {
     // Candidates should be merged with the previous suggestions.
     EXPECT_EQ(candidate_window.size(), 1);
     EXPECT_EQ(candidate_window.candidate(0).value(), kChars_Mozukusu);
-    EXPECT_FALSE(candidate_window.has_focused_index());
+    // The suggestion candidate list is focused so that it can be navigated
+    // while typing.
+    EXPECT_TRUE(candidate_window.has_focused_index());
+    EXPECT_EQ(candidate_window.focused_index(), 0);
   }
 }
 

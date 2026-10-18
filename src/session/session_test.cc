@@ -3692,6 +3692,41 @@ TEST_F(SessionTest, SpaceOnAlphanumeric) {
   }
 }
 
+TEST_F(SessionTest, SpaceOnAlphanumericWithPredictionMenu) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("A");
+    converter::Candidate* candidate = segment->add_candidate();
+    candidate->value = "A";
+    candidate->content_key = "A";
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  EXPECT_TRUE(SendKey("A", &session, &command));
+  EXPECT_EQ(GetComposition(command), "A");
+  ASSERT_TRUE(command.output().has_candidate_window());
+  // The suggestion is displayed as a focused prediction menu on desktop.
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+
+  // The space key keeps inserting a space into an alphanumeric composition
+  // even while the prediction menu is displayed.
+  command.Clear();
+  EXPECT_TRUE(SendKey("Space", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_FALSE(command.output().has_result());
+  EXPECT_EQ(GetComposition(command), "A ");
+}
+
 TEST_F(SessionTest, Issue1805239) {
   // This is a unittest against http://b/1805239.
   MockEngine engine;
@@ -4044,11 +4079,22 @@ TEST_F(SessionTest, SuggestionNumberShortcutCommitsImmediately) {
   commands::Command command;
   InsertCharacterChars("aiueo", &session, &command);
   ASSERT_TRUE(command.output().has_candidate_window());
-  EXPECT_EQ(command.output().candidate_window().category(), commands::SUGGESTION);
+  // The suggestion is displayed as a focused prediction menu on desktop.
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
   EXPECT_EQ(command.output().candidate_window().candidate(0).annotation().shortcut(),
             "1");
   EXPECT_EQ(command.output().candidate_window().candidate(1).annotation().shortcut(),
             "2");
+
+  // The second candidate is committed by the "2" key.  The commit goes through
+  // the converter interface, which is mocked here, so stub the commit path.
+  // The committed segments are consumed and become empty.
+  Segments committed_segments;
+  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 1))
+      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
+  EXPECT_CALL(*converter, FinishConversion(_, _))
+      .WillOnce(SetArgPointee<1>(committed_segments));
 
   command.Clear();
   EXPECT_TRUE(SendKey("2", &session, &command));
@@ -4070,15 +4116,17 @@ TEST_F(SessionTest, SuggestionNumberShortcutOutOfRangeFallsBackToInput) {
 
   Segments segments;
   SetAiueo(&segments);
-  const ConversionRequest request = CreateConversionRequest(session);
-  FillT13Ns(request, &segments);
+  // Don't use FillT13Ns() so that the candidate list contains exactly two
+  // candidates and the "9" key is out of the shortcut range.
   EXPECT_CALL(*converter, StartPrediction(_, _))
       .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
 
   commands::Command command;
   InsertCharacterChars("aiueo", &session, &command);
   ASSERT_TRUE(command.output().has_candidate_window());
-  EXPECT_EQ(command.output().candidate_window().category(), commands::SUGGESTION);
+  // The suggestion is displayed as a focused prediction menu on desktop.
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
   ASSERT_EQ(command.output().candidate_window().candidate_size(), 2);
 
   command.Clear();
@@ -4086,6 +4134,101 @@ TEST_F(SessionTest, SuggestionNumberShortcutOutOfRangeFallsBackToInput) {
   EXPECT_TRUE(command.output().consumed());
   EXPECT_FALSE(command.output().has_result());
   EXPECT_FALSE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, SuggestionCandidateNavigationWhileTyping) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  SetAiueo(&segments);
+  for (int i = 1; i <= 9; ++i) {
+    AddCandidate("あいうえお", absl::StrCat("候補", i),
+                 segments.mutable_segment(0));
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+  EXPECT_CALL(*converter, FocusSegmentValue(_, _, _))
+      .WillRepeatedly(Return(true));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  const commands::CandidateWindow& candidate_window =
+      command.output().candidate_window();
+  // The suggestion is displayed as a focused prediction menu on desktop.
+  EXPECT_EQ(candidate_window.category(), commands::PREDICTION);
+  EXPECT_EQ(candidate_window.size(), 11);
+  EXPECT_TRUE(candidate_window.has_focused_index());
+  EXPECT_EQ(candidate_window.focused_index(), 0);
+
+  // Down focuses the next candidate without committing.
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::DOWN, &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_FALSE(command.output().has_result());
+  EXPECT_EQ(GetComposition(command), "あいうえお");
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 1);
+
+  // Up focuses the previous candidate.
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::UP, &session, &command));
+  EXPECT_FALSE(command.output().has_result());
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
+
+  // Space also focuses the next candidate.
+  command.Clear();
+  EXPECT_TRUE(SendKey("space", &session, &command));
+  EXPECT_FALSE(command.output().has_result());
+  EXPECT_EQ(GetComposition(command), "あいうえお");
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 1);
+
+  // Tab also focuses the next candidate.
+  command.Clear();
+  EXPECT_TRUE(SendKey("tab", &session, &command));
+  EXPECT_FALSE(command.output().has_result());
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 2);
+
+  // PageDown focuses the beginning of the next page.
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::PAGE_DOWN, &session, &command));
+  EXPECT_FALSE(command.output().has_result());
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 9);
+  EXPECT_EQ(command.output().candidate_window().candidate(0).index(), 9);
+
+  // PageUp focuses the beginning of the first page.
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::PAGE_UP, &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
+
+  // Number shortcuts commit the focused page's candidate.  Go back to the
+  // second page and commit its first candidate ("候補8") by "1".
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::PAGE_DOWN, &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 9);
+  const int candidate_id = command.output().candidate_window().candidate(0).id();
+
+  Segments committed_segments;
+  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, candidate_id))
+      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
+  EXPECT_CALL(*converter, FinishConversion(_, _))
+      .WillOnce(SetArgPointee<1>(committed_segments));
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("1", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("候補8", command);
+  EXPECT_TRUE(GetComposition(command).empty());
 }
 
 TEST_F(SessionTest, NumpadKey) {

@@ -591,9 +591,29 @@ bool EngineConverter::Suggest(const composer::Composer& composer,
   // prediction/suggestions later
   previous_suggestions_ = segments_.conversion_segment(0);
 
-  // Overwrite the request type to SUGGESTION.
-  // Without this logic, a candidate gets focused that is unexpected behavior.
-  request_type_ = ConversionRequest::SUGGESTION;
+  // On desktop environments, the candidate list is displayed while typing and
+  // behaves like the prediction candidate list, i.e. the candidate menu which
+  // is usually expanded by the Tab key:
+  // -  A candidate is focused so that it can be navigated with the
+  //    up/down/page keys.
+  // -  The category becomes PREDICTION so that the candidate window is
+  //    rendered with the index (1-9) shortcuts and the index footer, instead
+  //    of the "Tabキーで選択" footer of the legacy suggestion window.
+  // Note that |state_| is still set to SUGGESTION below so that the
+  // composition (preedit) remains the typed text and Enter keeps committing
+  // the composition itself rather than the focused candidate.
+  // Mobile environments (mixed conversion and zero query suggestion) keep the
+  // legacy behavior because they have their own UI and request handling.
+  const bool focused_candidate_menu =
+      !request_->mixed_conversion() && !request_->zero_query_suggestion();
+  if (focused_candidate_menu) {
+    request_type_ = ConversionRequest::PREDICTION;
+  } else {
+    // Overwrite the request type to SUGGESTION.
+    // Without this logic, a candidate gets focused that is unexpected
+    // behavior.
+    request_type_ = ConversionRequest::SUGGESTION;
+  }
 
   // TODO(komatsu): the next line can be deleted.
   segment_index_ = 0;
@@ -668,26 +688,74 @@ bool EngineConverter::Predict(const composer::Composer& composer,
 
 void EngineConverter::MaybeExpandPrediction(
     const composer::Composer& composer) {
-  DCHECK(CheckState(PREDICTION | CONVERSION));
+  DCHECK(CheckState(SUGGESTION | PREDICTION | CONVERSION));
 
-  // Expand the current suggestions and fill with Prediction results.
-  if (!CheckState(PREDICTION) || IsEmptySegment(previous_suggestions_) ||
-      !candidate_list_.focused() ||
+  if (IsEmptySegment(previous_suggestions_) || !candidate_list_.focused() ||
       candidate_list_.focused_index() != candidate_list_.last_index()) {
     return;
   }
 
-  DCHECK(CheckState(PREDICTION));
-  ResetResult();
-
   const size_t previous_index = candidate_list_.focused_index();
-  if (!Predict(composer, conversion_preferences_)) {
-    return;
+  if (CheckState(SUGGESTION)) {
+    // The candidate list is displayed while typing.  Try to load more
+    // candidates keeping the SUGGESTION state.
+    if (!ExpandSuggestion(composer)) {
+      return;
+    }
+  } else {
+    if (!CheckState(PREDICTION)) {
+      return;
+    }
+    ResetResult();
+    if (!Predict(composer, conversion_preferences_)) {
+      return;
+    }
   }
 
   DCHECK_LT(previous_index, candidate_list_.size());
   candidate_list_.MoveToId(candidate_list_.candidate(previous_index).id());
   UpdateSelectedCandidateIndex();
+}
+
+bool EngineConverter::ExpandSuggestion(const composer::Composer& composer) {
+  DCHECK(CheckState(SUGGESTION));
+  DCHECK(request_);
+  DCHECK(config_);
+  DCHECK(!IsEmptySegment(previous_suggestions_));
+
+  // Request the prediction candidates again.  The candidates which are already
+  // displayed are merged into the result by using the previous suggestions as
+  // the prefix of the candidate list.
+  ConversionRequest::Options options;
+  options.enable_user_history_for_conversion =
+      conversion_preferences_.use_history;
+  options.use_actual_converter_for_realtime_conversion = true;
+  SetRequestType(ConversionRequest::PREDICTION, options);
+
+  const ConversionRequest conversion_request =
+      ConversionRequestBuilder()
+          .SetComposer(composer)
+          .SetRequestView(*request_)
+          .SetContextView(commands::Context::default_instance())
+          .SetConfigView(*config_)
+          .SetOptions(std::move(options))
+          .Build();
+
+  segments_.clear_conversion_segments();
+  if (!converter_->StartPredictionWithPreviousSuggestion(
+          conversion_request, previous_suggestions_, &segments_)) {
+    // Nothing is expanded.  Restore the previous suggestions so that the
+    // currently displayed candidate list is kept as-is.
+    segments_.clear_conversion_segments();
+    segments_.PrependCandidates(previous_suggestions_);
+    return false;
+  }
+
+  segment_index_ = 0;
+  UpdateCandidateList();
+  candidate_list_visible_ = true;
+  InitializeSelectedCandidateIndices();
+  return true;
 }
 
 void EngineConverter::Cancel() {
@@ -1113,7 +1181,10 @@ void EngineConverter::SegmentWidthShrink(const composer::Composer& composer) {
 }
 
 void EngineConverter::CandidateNext(const composer::Composer& composer) {
-  DCHECK(CheckState(PREDICTION | CONVERSION));
+  DCHECK(CheckState(SUGGESTION | PREDICTION | CONVERSION));
+  if (candidate_list_.size() == 0) {
+    return;
+  }
   ResetResult();
 
   MaybeExpandPrediction(composer);
@@ -1124,7 +1195,10 @@ void EngineConverter::CandidateNext(const composer::Composer& composer) {
 }
 
 void EngineConverter::CandidateNextPage() {
-  DCHECK(CheckState(PREDICTION | CONVERSION));
+  DCHECK(CheckState(SUGGESTION | PREDICTION | CONVERSION));
+  if (candidate_list_.size() == 0) {
+    return;
+  }
   ResetResult();
 
   candidate_list_.MoveNextPage();
@@ -1134,7 +1208,10 @@ void EngineConverter::CandidateNextPage() {
 }
 
 void EngineConverter::CandidatePrev() {
-  DCHECK(CheckState(PREDICTION | CONVERSION));
+  DCHECK(CheckState(SUGGESTION | PREDICTION | CONVERSION));
+  if (candidate_list_.size() == 0) {
+    return;
+  }
   ResetResult();
 
   candidate_list_.MovePrev();
@@ -1144,7 +1221,10 @@ void EngineConverter::CandidatePrev() {
 }
 
 void EngineConverter::CandidatePrevPage() {
-  DCHECK(CheckState(PREDICTION | CONVERSION));
+  DCHECK(CheckState(SUGGESTION | PREDICTION | CONVERSION));
+  if (candidate_list_.size() == 0) {
+    return;
+  }
   ResetResult();
 
   candidate_list_.MovePrevPage();

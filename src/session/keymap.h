@@ -122,6 +122,12 @@ struct CompositionState {
     CONVERT,                  // Move to Conversion status.
     CONVERT_WITHOUT_HISTORY,  // Move to Conversion status.
     PREDICT_AND_CONVERT,
+    // Candidate navigation for the candidate list which is displayed while
+    // typing (down/up/page keys).
+    CONVERT_NEXT,       // Focus the next candidate.
+    CONVERT_PREV,       // Focus the previous candidate.
+    CONVERT_NEXT_PAGE,  // Focus the first candidate of the next page.
+    CONVERT_PREV_PAGE,  // Focus the first candidate of the previous page.
     // Switching to ConversionState
     CONVERT_TO_HIRAGANA,       // F6
     CONVERT_TO_FULL_KATAKANA,  // F7

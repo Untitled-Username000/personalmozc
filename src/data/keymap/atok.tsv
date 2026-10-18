@@ -120,7 +120,11 @@ Prediction	Ctrl Up	ConvertPrev
 Prediction	Down	ConvertNext
 Prediction	Up	ConvertPrev
 Prediction	Ctrl Delete	DeleteSelectedCandidate
-Suggestion	Ctrl Down	PredictAndConvert
+Suggestion	Ctrl Down	ConvertNext
 Suggestion	Ctrl Enter	CommitFirstSuggestion
-Suggestion	Down	PredictAndConvert
+Suggestion	Ctrl Up	ConvertPrev
+Suggestion	Down	ConvertNext
 Suggestion	Shift Enter	CommitFirstSuggestion
+Suggestion	Space	ConvertNext
+Suggestion	Tab	ConvertNext
+Suggestion	Up	ConvertPrev
