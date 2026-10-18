@@ -2371,6 +2371,29 @@ TEST_F(EngineConverterTest, OnePhaseSuggestion) {
   }
 }
 
+TEST_F(EngineConverterTest, SuggestUsesPredictionRequestType) {
+  auto mock_converter = std::make_shared<MockConverter>();
+  EngineConverter converter(mock_converter, request_, config_);
+  request_->set_mixed_conversion(false);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key(kChars_Mo);
+    converter::Candidate* candidate = segment->add_candidate();
+    candidate->value = kChars_Mozuku;
+    candidate->content_key = kChars_Mozuku;
+  }
+  composer_->InsertCharacterPreedit(kChars_Mo);
+
+  EXPECT_CALL(*mock_converter,
+              StartPrediction(Property(&ConversionRequest::request_type,
+                                       Eq(ConversionRequest::PREDICTION)),
+                              _))
+      .WillOnce(DoAll(SetArgPointee<1>(segments), Return(true)));
+  EXPECT_TRUE(converter.Suggest(*composer_, Context::default_instance()));
+}
+
 TEST_F(EngineConverterTest, SuppressSuggestionWhenNotRequested) {
   auto mock_converter = std::make_shared<MockConverter>();
   EngineConverter converter(mock_converter, request_, config_);
