@@ -517,7 +517,7 @@ bool EngineConverter::Suggest(const composer::Composer& composer,
   //                  prediction API.
   // - (true, true): Mobile suggestion with richer candidates through
   //                  prediction API, using partial composition text.
-  const bool use_prediction_candidate = request_->mixed_conversion();
+  const bool use_prediction_candidate = true;
   const bool use_partial_composition =
       (cursor != composer.GetLength() && cursor != 0 &&
        request_->mixed_conversion());
