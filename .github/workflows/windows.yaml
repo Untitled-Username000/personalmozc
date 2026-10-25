@@ -38,14 +38,30 @@ jobs:
         run: |
           python build_tools/update_deps.py
 
+      - name: Restore Qt cache
+        id: qt-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: src/third_party/qt
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/build_tools/build_qt.py', 'src/build_tools/update_deps.py') }}
+
       - name: Build Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: .\src
         run: |
           python build_tools/build_qt.py --release --confirm_license
 
+      - name: Save Qt cache
+        if: steps.qt-cache.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v6
+        with:
+          path: src/third_party/qt
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
       # This is needed only for GitHub Actions where free disk space is quite limited.
       - name: Delete Qt src to save disk space
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: .\src
         run: |
@@ -91,14 +107,30 @@ jobs:
         run: |
           python build_tools/update_deps.py
 
+      - name: Restore Qt cache
+        id: qt-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: src/third_party/qt
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/build_tools/build_qt.py', 'src/build_tools/update_deps.py') }}
+
       - name: Build Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: .\src
         run: |
           python build_tools/build_qt.py --release --confirm_license
 
+      - name: Save Qt cache
+        if: steps.qt-cache.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v6
+        with:
+          path: src/third_party/qt
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
       # This is needed only for GitHub Actions where free disk space is quite limited.
       - name: Delete Qt src to save disk space
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: .\src
         run: |
@@ -144,14 +176,30 @@ jobs:
         run: |
           python build_tools/update_deps.py
 
+      - name: Restore Qt cache
+        id: qt-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: src/third_party/qt
+          key: qt-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/build_tools/build_qt.py', 'src/build_tools/update_deps.py') }}
+
       - name: Build Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: .\src
         run: |
           python build_tools/build_qt.py --release --confirm_license
 
+      - name: Save Qt cache
+        if: steps.qt-cache.outputs.cache-hit != 'true' && success()
+        uses: actions/cache/save@v6
+        with:
+          path: src/third_party/qt
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
       # This is needed only for GitHub Actions where free disk space is quite limited.
       - name: Delete Qt src to save disk space
+        if: steps.qt-cache.outputs.cache-hit != 'true'
         shell: cmd
         working-directory: .\src
         run: |
