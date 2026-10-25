@@ -302,6 +302,9 @@ class Session {
   // the current mode will be considered.
   bool IsFullWidthInsertSpace(const mozc::commands::Input& input) const;
 
+  // Returns true if the current input mode is for alphanumeric characters.
+  bool IsAsciiInputMode() const;
+
   // Returns true if the command is a space key event on an alphanumeric
   // composition.  Such a space is treated as a whitespace character rather
   // than a candidate navigation key.
@@ -359,6 +362,19 @@ class Session {
   // Process it and return true, otherwise return false.
   bool MaybeSelectCandidate(mozc::commands::Command* command);
   bool MaybeCommitSuggestionByNumber(mozc::commands::Command* command);
+
+  // If the focused candidate of the prediction menu displayed while typing
+  // exists, commits it and returns true.  Returns false when there is no
+  // focused prediction candidate (e.g. no candidate is displayed or the
+  // composition is alphanumeric), in which case the caller should fall back
+  // to the conventional behavior.
+  bool MaybeCommitFocusedSuggestion(mozc::commands::Command* command);
+
+  // Commits the candidate at |index| in the current page of the candidate
+  // window displayed while typing.  Returns false if no such candidate is
+  // displayed.
+  bool CommitSuggestionAtPageIndex(mozc::commands::Command* command,
+                                   size_t index);
 
   // Fill command's output according to the current state.
   void OutputFromState(mozc::commands::Command* command);

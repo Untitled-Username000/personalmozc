@@ -4231,6 +4231,239 @@ TEST_F(SessionTest, SuggestionCandidateNavigationWhileTyping) {
   EXPECT_TRUE(GetComposition(command).empty());
 }
 
+TEST_F(SessionTest, EnterCommitsFocusedSuggestionWhileTyping) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("あいうえお");
+    for (const char* value : {"候補0", "候補1", "候補2"}) {
+      converter::Candidate* candidate = segment->add_candidate();
+      candidate->key = "あいうえお";
+      candidate->content_key = "あいうえお";
+      candidate->value = value;
+    }
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
+
+  // Enter commits the focused (first) candidate instead of the raw
+  // composition.
+  Segments committed_segments;
+  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 0))
+      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
+  EXPECT_CALL(*converter, FinishConversion(_, _))
+      .WillOnce(SetArgPointee<1>(committed_segments));
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("候補0", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, EnterCommitsFocusedSuggestionAfterNavigation) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("あいうえお");
+    for (const char* value : {"候補0", "候補1", "候補2"}) {
+      converter::Candidate* candidate = segment->add_candidate();
+      candidate->key = "あいうえお";
+      candidate->content_key = "あいうえお";
+      candidate->value = value;
+    }
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+  EXPECT_CALL(*converter, FocusSegmentValue(_, _, _))
+      .WillRepeatedly(Return(true));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+
+  // Down focuses the second candidate.
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::DOWN, &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 1);
+
+  Segments committed_segments;
+  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 1))
+      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
+  EXPECT_CALL(*converter, FinishConversion(_, _))
+      .WillOnce(SetArgPointee<1>(committed_segments));
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("候補1", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, EnterCommitsFocusedSuggestionOnSecondPage) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  SetAiueo(&segments);
+  for (int i = 1; i <= 9; ++i) {
+    AddCandidate("あいうえお", absl::StrCat("候補", i),
+                 segments.mutable_segment(0));
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+  EXPECT_CALL(*converter, FocusSegmentValue(_, _, _))
+      .WillRepeatedly(Return(true));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+
+  // Move the focus to the beginning of the second page.
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::PAGE_DOWN, &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 9);
+
+  // Enter commits the focused candidate on the current page ("候補8").
+  Segments committed_segments;
+  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 9))
+      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
+  EXPECT_CALL(*converter, FinishConversion(_, _))
+      .WillOnce(SetArgPointee<1>(committed_segments));
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("候補8", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, EnterCommitsRawCompositionForAlphanumericInput) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("A");
+    converter::Candidate* candidate = segment->add_candidate();
+    candidate->value = "Ａ";
+    candidate->content_key = "Ａ";
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  EXPECT_TRUE(SendKey("A", &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+
+  // Enter keeps committing the raw composition for alphanumeric input.
+  command.Clear();
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("A", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, NumberShortcutNotAppliedToAlphanumericInput) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("A");
+    converter::Candidate* candidate = segment->add_candidate();
+    candidate->value = "Ａ";
+    candidate->content_key = "Ａ";
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  EXPECT_TRUE(SendKey("A", &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+
+  // Digits are part of the composition in alphanumeric input mode, so "1" is
+  // inserted instead of committing the first suggestion.
+  command.Clear();
+  EXPECT_TRUE(SendKey("1", &session, &command));
+  EXPECT_FALSE(command.output().has_result());
+  EXPECT_EQ(GetComposition(command), "A1");
+}
+
+TEST_F(SessionTest, NumberShortcutWithFullWidthDigit) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("あいうえお");
+    for (const char* value : {"候補0", "候補1", "候補2"}) {
+      converter::Candidate* candidate = segment->add_candidate();
+      candidate->key = "あいうえお";
+      candidate->content_key = "あいうえお";
+      candidate->value = value;
+    }
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+
+  // Some keyboard layouts report "１" (U+FF11) for the "1" key.  It is still
+  // handled as the shortcut for the first candidate.
+  Segments committed_segments;
+  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 0))
+      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
+  EXPECT_CALL(*converter, FinishConversion(_, _))
+      .WillOnce(SetArgPointee<1>(committed_segments));
+
+  command.Clear();
+  EXPECT_TRUE(SendKey("１", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("候補0", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
 TEST_F(SessionTest, NumpadKey) {
   MockEngine engine;
   std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);

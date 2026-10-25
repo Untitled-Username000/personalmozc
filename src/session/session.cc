@@ -722,6 +722,11 @@ bool Session::SendKeyCompositionState(commands::Command* command) {
       return InsertCharacter(command);
 
     case keymap::CompositionState::COMMIT:
+      // While the prediction menu is displayed, the Enter key commits the
+      // focused candidate instead of the raw composition.
+      if (MaybeCommitFocusedSuggestion(command)) {
+        return true;
+      }
       return Commit(command);
 
     case keymap::CompositionState::COMMIT_FIRST_SUGGESTION:
@@ -1487,12 +1492,61 @@ bool Session::MaybeCommitSuggestionByNumber(commands::Command* command) {
 
   commands::KeyEvent normalized_keyevent;
   KeyEventUtil::NormalizeModifiers(command->input().key(), &normalized_keyevent);
-  const char shortcut = static_cast<char>(normalized_keyevent.key_code());
-  if (shortcut < '1' || shortcut > '9') {
+  uint32_t key_code = normalized_keyevent.key_code();
+  // Some keyboard layouts and input modes report full-width digits (０-９)
+  // for the number keys.  Treat them as the corresponding half-width digits.
+  if (key_code >= 0xFF10 && key_code <= 0xFF19) {
+    key_code = '0' + (key_code - 0xFF10);
+  }
+  if (key_code < '1' || key_code > '9') {
     return false;
   }
-  const size_t index = shortcut - '1';
+  // In alphanumeric input mode digits are part of the composition, so they
+  // must not be consumed as shortcut keys.
+  if (IsAsciiInputMode()) {
+    return false;
+  }
+  return CommitSuggestionAtPageIndex(command, key_code - '1');
+}
 
+bool Session::MaybeCommitFocusedSuggestion(commands::Command* command) {
+  if (context_->state() != ImeContext::COMPOSITION ||
+      !context_->converter().CheckState(EngineConverterInterface::SUGGESTION)) {
+    return false;
+  }
+  // Keep committing the raw composition for alphanumeric input so that
+  // Enter keeps working as usual while typing ASCII characters, numbers,
+  // URLs, etc.
+  if (IsAsciiInputMode()) {
+    return false;
+  }
+
+  commands::Output output;
+  context_->converter().FillOutput(context_->composer(), &output);
+  if (!output.has_candidate_window()) {
+    return false;
+  }
+  const commands::CandidateWindow& candidate_window = output.candidate_window();
+  // The candidate menu displayed while typing is the focused prediction list.
+  // Keep the conventional behavior for the mobile suggestion list and for the
+  // conversion list.
+  if (candidate_window.category() != commands::PREDICTION ||
+      !candidate_window.has_focused_index()) {
+    return false;
+  }
+  const int focused_index = candidate_window.focused_index();
+  for (int i = 0; i < candidate_window.candidate_size(); ++i) {
+    if (static_cast<int>(candidate_window.candidate(i).index()) ==
+        focused_index) {
+      // |i| is the page-local index of the focused candidate.
+      return CommitSuggestionAtPageIndex(command, i);
+    }
+  }
+  return false;
+}
+
+bool Session::CommitSuggestionAtPageIndex(commands::Command* command,
+                                          size_t index) {
   commands::Output output;
   context_->converter().FillOutput(context_->composer(), &output);
   // While typing, the candidate window is shown as the prediction style
@@ -1506,11 +1560,17 @@ bool Session::MaybeCommitSuggestionByNumber(commands::Command* command) {
   }
   const int candidate_id = output.candidate_window().candidate(index).id();
 
+  command->mutable_output()->set_consumed(true);
+
   PushUndoContext();
   size_t consumed_key_size = 0;
   if (!context_->mutable_converter()->CommitSuggestionById(
           candidate_id, context_->composer(), command->input().context(),
           &consumed_key_size)) {
+    // The candidate could not be committed.  Discard the undo context which
+    // was pushed for the commit so that the caller can fall back to the
+    // conventional behavior.
+    ClearUndoContext();
     return false;
   }
   if (consumed_key_size < context_->composer().GetLength()) {
@@ -1713,6 +1773,13 @@ bool Session::IsFullWidthInsertSpace(const commands::Input& input) const {
   return is_full_width;
 }
 
+bool Session::IsAsciiInputMode() const {
+  const transliteration::TransliterationType input_mode =
+      context_->composer().GetInputMode();
+  return input_mode == transliteration::HALF_ASCII ||
+         input_mode == transliteration::FULL_ASCII;
+}
+
 bool Session::IsSpaceKeyOnAsciiComposition(
     const commands::Command* command) const {
   const commands::KeyEvent& key = command->input().key();
@@ -1721,10 +1788,7 @@ bool Session::IsSpaceKeyOnAsciiComposition(
     return false;
   }
   // Mirror the condition used in Session::Convert.
-  const transliteration::TransliterationType input_mode =
-      context_->composer().GetInputMode();
-  return input_mode == transliteration::HALF_ASCII ||
-         input_mode == transliteration::FULL_ASCII;
+  return IsAsciiInputMode();
 }
 
 bool Session::InsertSpace(commands::Command* command) {
