@@ -1,8 +1,11 @@
 name: CI for Windows
 # https://github.com/google/mozc/blob/master/docs/build_mozc_in_windows.md
 
-# Run on push.
-on: push
+# Run on push.  The universal/ARM builds and the test jobs are only run
+# manually (workflow_dispatch) to save Windows runner time.
+on:
+  push:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -83,6 +86,7 @@ jobs:
           if-no-files-found: warn
 
   build_universal_on_x64:
+    if: github.event_name == 'workflow_dispatch'
     # https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md
     runs-on: windows-2025
     timeout-minutes: 120
@@ -152,6 +156,7 @@ jobs:
           if-no-files-found: warn
 
   build_on_arm64:
+    if: github.event_name == 'workflow_dispatch'
     # https://github.com/actions/runner-images/blob/main/images/windows/Windows11-Arm64-Readme.md
     runs-on: windows-11-arm
     timeout-minutes: 120
@@ -221,6 +226,7 @@ jobs:
           if-no-files-found: warn
 
   test_on_x64:
+    if: github.event_name == 'workflow_dispatch'
     # https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md
     runs-on: windows-2025
     timeout-minutes: 120
@@ -269,6 +275,7 @@ jobs:
           if-no-files-found: ignore
 
   test_on_arm64:
+    if: github.event_name == 'workflow_dispatch'
     # https://github.com/actions/runner-images/blob/main/images/windows/Windows11-Arm64-Readme.md
     runs-on: windows-11-arm
     timeout-minutes: 120
@@ -315,59 +322,3 @@ jobs:
           name: test-logs-${{ runner.os }}-${{ runner.arch }}
           path: test_logs
           if-no-files-found: ignore
-
-  # actions/cache works without this job, but having this would increase the likelihood of cache hit
-  # in other jobs. Another approach would be to use "needs:".
-  # https://docs.github.com/en/actions/using-jobs/using-jobs-in-a-workflow
-  cache_deps_on_x64:
-    # https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md
-    runs-on: windows-2025
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          submodules: false
-          persist-credentials: false
-
-      - name: Try to restore update_deps cache
-        uses: actions/cache@v6
-        with:
-          path: src/third_party_cache
-          key: update_deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/build_tools/update_deps.py') }}
-
-      - name: Install Dependencies
-        shell: cmd
-        working-directory: .\src
-        # This command uses src/third_party_cache as the download cache.
-        run: |
-          python build_tools/update_deps.py --cache_only
-
-  # actions/cache works without this job, but having this would increase the likelihood of cache hit
-  # in other jobs. Another approach would be to use "needs:".
-  # https://docs.github.com/en/actions/using-jobs/using-jobs-in-a-workflow
-  cache_deps_on_arm64:
-    # https://github.com/actions/runner-images/blob/main/images/windows/Windows11-Arm64-Readme.md
-    runs-on: windows-11-arm
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          submodules: false
-          persist-credentials: false
-
-      - name: Try to restore update_deps cache
-        uses: actions/cache@v6
-        with:
-          path: src/third_party_cache
-          key: update_deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/build_tools/update_deps.py') }}
-
-      - name: Install Dependencies
-        shell: cmd
-        working-directory: .\src
-        # This command uses src/third_party_cache as the download cache.
-        run: |
-          python build_tools/update_deps.py --cache_only
