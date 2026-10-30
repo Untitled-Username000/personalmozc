@@ -85,6 +85,48 @@ jobs:
           path: src/bazel-bin/win32/installer/Mozc64.msi
           if-no-files-found: warn
 
+  release_on_x64:
+    needs: build_on_x64
+    # Publish builds from the default branch and manual runs only, so that
+    # feature branches do not become the "latest" release.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download x64 installer
+        uses: actions/download-artifact@v7
+        with:
+          name: Mozc64_x64.msi
+
+      - name: Publish Windows x64 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mv Mozc64.msi Mozc64_x64.msi
+
+          tag="win-x64-${GITHUB_SHA::12}"
+          title="Windows x64 build ${GITHUB_SHA::7}"
+          notes="Automatic Windows x64 build for commit ${GITHUB_SHA}.
+
+          [View the workflow run](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$title" --notes "$notes" --latest
+            gh release upload "$tag" Mozc64_x64.msi --clobber
+          else
+            gh release create "$tag" Mozc64_x64.msi \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --notes "$notes" \
+              --latest
+          fi
+
   build_universal_on_x64:
     if: github.event_name == 'workflow_dispatch'
     # https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md

@@ -599,9 +599,9 @@ bool EngineConverter::Suggest(const composer::Composer& composer,
   // -  The category becomes PREDICTION so that the candidate window is
   //    rendered with the index (1-9) shortcuts and the index footer, instead
   //    of the "Tabキーで選択" footer of the legacy suggestion window.
-  // Note that |state_| is still set to SUGGESTION below so that the
-  // composition (preedit) remains the typed text and Enter keeps committing
-  // the composition itself rather than the focused candidate.
+  // Note that |state_| is still set to SUGGESTION below so that typing
+  // continues to refine the composition; the focused candidate is committed
+  // with Enter by the session layer.
   // Mobile environments (mixed conversion and zero query suggestion) keep the
   // legacy behavior because they have their own UI and request handling.
   const bool focused_candidate_menu =

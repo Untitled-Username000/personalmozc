@@ -4231,7 +4231,7 @@ TEST_F(SessionTest, SuggestionCandidateNavigationWhileTyping) {
   EXPECT_TRUE(GetComposition(command).empty());
 }
 
-TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionWhileTyping) {
+TEST_F(SessionTest, EnterCommitsFocusedSuggestionWhileTyping) {
   MockEngine engine;
   std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
 
@@ -4259,55 +4259,8 @@ TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionWhileTyping) {
             commands::PREDICTION);
   EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
 
-  // Shift+Enter commits the focused (first) candidate instead of the raw
+  // Enter commits the focused (first) candidate instead of the raw
   // composition.
-  Segments committed_segments;
-  EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 0))
-      .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
-  EXPECT_CALL(*converter, FinishConversion(_, _))
-      .WillOnce(SetArgPointee<1>(committed_segments));
-
-  command.Clear();
-  EXPECT_TRUE(SendKey("Shift Enter", &session, &command));
-  EXPECT_TRUE(command.output().consumed());
-  EXPECT_RESULT("候補0", command);
-  EXPECT_TRUE(GetComposition(command).empty());
-}
-
-TEST_F(SessionTest, EnterCommitsFirstSuggestionWhileTyping) {
-  MockEngine engine;
-  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
-
-  Session session(engine);
-  InitSessionToPrecomposition(&session);
-
-  Segments segments;
-  {
-    Segment* segment = segments.add_segment();
-    segment->set_key("あいうえお");
-    for (const char* value : {"候補0", "候補1", "候補2"}) {
-      converter::Candidate* candidate = segment->add_candidate();
-      candidate->key = "あいうえお";
-      candidate->content_key = "あいうえお";
-      candidate->value = value;
-    }
-  }
-  EXPECT_CALL(*converter, StartPrediction(_, _))
-      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
-  EXPECT_CALL(*converter, FocusSegmentValue(_, _, _))
-      .WillRepeatedly(Return(true));
-
-  commands::Command command;
-  InsertCharacterChars("aiueo", &session, &command);
-  ASSERT_TRUE(command.output().has_candidate_window());
-
-  // Down focuses the second candidate.
-  command.Clear();
-  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::DOWN, &session, &command));
-  ASSERT_TRUE(command.output().has_candidate_window());
-  EXPECT_EQ(command.output().candidate_window().focused_index(), 1);
-
-  // Enter commits the first suggestion, not the focused candidate.
   Segments committed_segments;
   EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 0))
       .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
@@ -4321,7 +4274,7 @@ TEST_F(SessionTest, EnterCommitsFirstSuggestionWhileTyping) {
   EXPECT_TRUE(GetComposition(command).empty());
 }
 
-TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionAfterNavigation) {
+TEST_F(SessionTest, EnterCommitsFocusedSuggestionAfterNavigation) {
   MockEngine engine;
   std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
 
@@ -4361,13 +4314,13 @@ TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionAfterNavigation) {
       .WillOnce(SetArgPointee<1>(committed_segments));
 
   command.Clear();
-  EXPECT_TRUE(SendKey("Shift Enter", &session, &command));
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
   EXPECT_TRUE(command.output().consumed());
   EXPECT_RESULT("候補1", command);
   EXPECT_TRUE(GetComposition(command).empty());
 }
 
-TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionOnSecondPage) {
+TEST_F(SessionTest, EnterCommitsFocusedSuggestionOnSecondPage) {
   MockEngine engine;
   std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
 
@@ -4395,7 +4348,7 @@ TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionOnSecondPage) {
   ASSERT_TRUE(command.output().has_candidate_window());
   EXPECT_EQ(command.output().candidate_window().focused_index(), 9);
 
-  // Shift+Enter commits the focused candidate on the current page ("候補8").
+  // Enter commits the focused candidate on the current page ("候補8").
   Segments committed_segments;
   EXPECT_CALL(*converter, CommitSegmentValue(_, 0, 9))
       .WillOnce(DoAll(SetArgPointee<0>(committed_segments), Return(true)));
@@ -4403,7 +4356,7 @@ TEST_F(SessionTest, ShiftEnterCommitsFocusedSuggestionOnSecondPage) {
       .WillOnce(SetArgPointee<1>(committed_segments));
 
   command.Clear();
-  EXPECT_TRUE(SendKey("Shift Enter", &session, &command));
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
   EXPECT_TRUE(command.output().consumed());
   EXPECT_RESULT("候補8", command);
   EXPECT_TRUE(GetComposition(command).empty());
@@ -4436,39 +4389,6 @@ TEST_F(SessionTest, EnterCommitsRawCompositionForAlphanumericInput) {
   // Enter keeps committing the raw composition for alphanumeric input.
   command.Clear();
   EXPECT_TRUE(SendKey("Enter", &session, &command));
-  EXPECT_TRUE(command.output().consumed());
-  EXPECT_RESULT("A", command);
-  EXPECT_TRUE(GetComposition(command).empty());
-}
-
-TEST_F(SessionTest, ShiftEnterCommitsRawCompositionForAlphanumericInput) {
-  MockEngine engine;
-  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
-
-  Session session(engine);
-  InitSessionToPrecomposition(&session);
-
-  Segments segments;
-  {
-    Segment* segment = segments.add_segment();
-    segment->set_key("A");
-    converter::Candidate* candidate = segment->add_candidate();
-    candidate->value = "Ａ";
-    candidate->content_key = "Ａ";
-  }
-  EXPECT_CALL(*converter, StartPrediction(_, _))
-      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
-
-  commands::Command command;
-  EXPECT_TRUE(SendKey("A", &session, &command));
-  ASSERT_TRUE(command.output().has_candidate_window());
-  EXPECT_EQ(command.output().candidate_window().category(),
-            commands::PREDICTION);
-
-  // Shift+Enter also keeps committing the raw composition for alphanumeric
-  // input.
-  command.Clear();
-  EXPECT_TRUE(SendKey("Shift Enter", &session, &command));
   EXPECT_TRUE(command.output().consumed());
   EXPECT_RESULT("A", command);
   EXPECT_TRUE(GetComposition(command).empty());
