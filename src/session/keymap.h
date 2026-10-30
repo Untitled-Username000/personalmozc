@@ -119,6 +119,8 @@ struct CompositionState {
     MOVE_MOVE_CURSOR_TO_END,
     COMMIT,                   // Move to Precomposition status.
     COMMIT_FIRST_SUGGESTION,  // ATOK's Shift-Enter style
+    // Commit the focused candidate of the prediction menu.
+    COMMIT_FOCUSED_SUGGESTION,
     CONVERT,                  // Move to Conversion status.
     CONVERT_WITHOUT_HISTORY,  // Move to Conversion status.
     PREDICT_AND_CONVERT,

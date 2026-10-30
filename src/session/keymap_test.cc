@@ -986,6 +986,24 @@ TEST_F(KeyMapTest, ShiftTabToConvertPrev) {
   }
 }
 
+TEST_F(KeyMapTest, SuggestionEnterCommitBindings) {
+  commands::KeyEvent key_event;
+  CompositionState::Commands command;
+
+  for (const auto keymap : {config::Config::MSIME, config::Config::KOTOERI,
+                            config::Config::ATOK, config::Config::CHROMEOS}) {
+    KeyMapManager manager(GetDefaultConfig(keymap));
+
+    KeyParser::ParseKey("Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT_FIRST_SUGGESTION);
+
+    KeyParser::ParseKey("Shift Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT_FOCUSED_SUGGESTION);
+  }
+}
+
 TEST_F(KeyMapTest, LaunchToolTest) {
   commands::KeyEvent key_event;
   PrecompositionState::Commands conv_command;

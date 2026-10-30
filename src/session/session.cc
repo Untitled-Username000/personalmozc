@@ -722,15 +722,24 @@ bool Session::SendKeyCompositionState(commands::Command* command) {
       return InsertCharacter(command);
 
     case keymap::CompositionState::COMMIT:
-      // While the prediction menu is displayed, the Enter key commits the
+      return Commit(command);
+
+    case keymap::CompositionState::COMMIT_FIRST_SUGGESTION:
+      // Enter commits the first suggestion while the prediction menu is
+      // shown. Keep the raw commit for alphanumeric input so that Enter keeps
+      // working as usual while typing ASCII characters, numbers, URLs, etc.
+      if (IsAsciiInputMode()) {
+        return Commit(command);
+      }
+      return CommitFirstSuggestion(command);
+
+    case keymap::CompositionState::COMMIT_FOCUSED_SUGGESTION:
+      // While the prediction menu is displayed, Shift+Enter commits the
       // focused candidate instead of the raw composition.
       if (MaybeCommitFocusedSuggestion(command)) {
         return true;
       }
       return Commit(command);
-
-    case keymap::CompositionState::COMMIT_FIRST_SUGGESTION:
-      return CommitFirstSuggestion(command);
 
     case keymap::CompositionState::CONVERT:
       return Convert(command);

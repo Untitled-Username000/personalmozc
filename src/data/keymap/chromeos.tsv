@@ -117,10 +117,11 @@ Precomposition	Shift Space	InsertAlternateSpace
 Precomposition	Space	InsertSpace
 Prediction	Ctrl Delete	DeleteSelectedCandidate
 Suggestion	Down	ConvertNext
+Suggestion	Enter	CommitFirstSuggestion
 Suggestion	PageDown	ConvertNextPage
 Suggestion	PageUp	ConvertPrevPage
 Suggestion	Shift Down	ConvertNextPage
-Suggestion	Shift Enter	CommitFirstSuggestion
+Suggestion	Shift Enter	CommitFocusedSuggestion
 Suggestion	Shift Up	ConvertPrevPage
 Suggestion	Space	ConvertNext
 Suggestion	Tab	ConvertNext

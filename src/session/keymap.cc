@@ -581,6 +581,8 @@ void KeyMapManager::InitCommandData() {
   RegisterCompositionCommand("Commit", CompositionState::COMMIT);
   RegisterCompositionCommand("CommitFirstSuggestion",
                              CompositionState::COMMIT_FIRST_SUGGESTION);
+  RegisterCompositionCommand("CommitFocusedSuggestion",
+                             CompositionState::COMMIT_FOCUSED_SUGGESTION);
   RegisterCompositionCommand("Convert", CompositionState::CONVERT);
   RegisterCompositionCommand("ConvertWithoutHistory",
                              CompositionState::CONVERT_WITHOUT_HISTORY);
