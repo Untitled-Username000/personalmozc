@@ -142,6 +142,7 @@ Suggestion	Down	ConvertNext
 Suggestion	PageDown	ConvertNextPage
 Suggestion	PageUp	ConvertPrevPage
 Suggestion	Shift Down	ConvertNextPage
+Suggestion	Enter	CommitFirstSuggestion
 Suggestion	Shift Enter	CommitFirstSuggestion
 Suggestion	Shift Up	ConvertPrevPage
 Suggestion	Space	ConvertNext

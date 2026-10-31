@@ -156,4 +156,5 @@ Precomposition	Shift Space	InsertAlternateSpace
 Precomposition	Space	InsertSpace
 Prediction	Ctrl Delete	DeleteSelectedCandidate
 Suggestion	Down	PredictAndConvert
+Suggestion	Enter	CommitFirstSuggestion
 Suggestion	Shift Enter	CommitFirstSuggestion
