@@ -729,6 +729,11 @@ bool Session::SendKeyCompositionState(commands::Command* command) {
       }
       return Commit(command);
 
+    case keymap::CompositionState::COMMIT_RAW:
+      // Shift+Enter commits the raw composition without consulting any
+      // candidate list.
+      return Commit(command);
+
     case keymap::CompositionState::COMMIT_FIRST_SUGGESTION:
       return CommitFirstSuggestion(command);
 
@@ -1520,6 +1525,12 @@ bool Session::MaybeCommitFocusedSuggestion(commands::Command* command) {
   if (IsAsciiInputMode()) {
     return false;
   }
+  // Mixed conversion and zero query suggestions are mobile-only features.
+  // Fall back to the raw composition for them.
+  if (context_->GetRequest().mixed_conversion() ||
+      context_->GetRequest().zero_query_suggestion()) {
+    return false;
+  }
 
   commands::Output output;
   context_->converter().FillOutput(context_->composer(), &output);
@@ -1528,10 +1539,12 @@ bool Session::MaybeCommitFocusedSuggestion(commands::Command* command) {
   }
   const commands::CandidateWindow& candidate_window = output.candidate_window();
   // The candidate menu displayed while typing is the focused prediction list.
-  // Keep the conventional behavior for the mobile suggestion list and for the
-  // conversion list.
-  if (candidate_window.category() != commands::PREDICTION ||
-      !candidate_window.has_focused_index()) {
+  // Accept both the prediction and the suggestion categories on desktop.
+  if (candidate_window.category() != commands::PREDICTION &&
+      candidate_window.category() != commands::SUGGESTION) {
+    return false;
+  }
+  if (!candidate_window.has_focused_index()) {
     return false;
   }
   const int focused_index = candidate_window.focused_index();

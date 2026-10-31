@@ -579,6 +579,7 @@ void KeyMapManager::InitCommandData() {
   RegisterCompositionCommand("MoveCursorToEnd",
                              CompositionState::MOVE_MOVE_CURSOR_TO_END);
   RegisterCompositionCommand("Commit", CompositionState::COMMIT);
+  RegisterCompositionCommand("CommitRaw", CompositionState::COMMIT_RAW);
   RegisterCompositionCommand("CommitFirstSuggestion",
                              CompositionState::COMMIT_FIRST_SUGGESTION);
   RegisterCompositionCommand("Convert", CompositionState::CONVERT);

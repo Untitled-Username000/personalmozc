@@ -124,8 +124,8 @@ Suggestion	Ctrl Down	ConvertNext
 Suggestion	Ctrl Enter	CommitFirstSuggestion
 Suggestion	Ctrl Up	ConvertPrev
 Suggestion	Down	ConvertNext
-Suggestion	Enter	CommitFirstSuggestion
-Suggestion	Shift Enter	CommitFirstSuggestion
+Suggestion	Enter	Commit
+Suggestion	Shift Enter	CommitRaw
 Suggestion	Space	ConvertNext
 Suggestion	Tab	ConvertNext
 Suggestion	Up	ConvertPrev
