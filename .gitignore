@@ -39,6 +39,9 @@ MODULE.bazel.lock
 # VSCode per-project settings
 .vscode/
 
+# Agentic Project Management session files
+/.apm/
+
 # Temporary working dirs
 /oss
 /src-*
