@@ -1151,6 +1151,66 @@ TEST_F(KeyMapTest, ZeroQuerySuggestion) {
   EXPECT_EQ(command, PrecompositionState::REVERT);
 }
 
+TEST_F(KeyMapTest, SuggestionEnterCommitsFocusedCandidate) {
+  commands::KeyEvent key_event;
+  CompositionState::Commands command;
+
+  {  // MSIME
+    KeyMapManager manager(GetDefaultConfig(config::Config::MSIME));
+    KeyParser::ParseKey("Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT);
+  }
+  {  // ATOK
+    KeyMapManager manager(GetDefaultConfig(config::Config::ATOK));
+    KeyParser::ParseKey("Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT);
+  }
+  {  // KOTOERI
+    KeyMapManager manager(GetDefaultConfig(config::Config::KOTOERI));
+    KeyParser::ParseKey("Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT);
+  }
+  {  // CHROMEOS
+    KeyMapManager manager(GetDefaultConfig(config::Config::CHROMEOS));
+    KeyParser::ParseKey("Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT);
+  }
+}
+
+TEST_F(KeyMapTest, SuggestionShiftEnterCommitsRawComposition) {
+  commands::KeyEvent key_event;
+  CompositionState::Commands command;
+
+  {  // MSIME
+    KeyMapManager manager(GetDefaultConfig(config::Config::MSIME));
+    KeyParser::ParseKey("Shift Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT_RAW);
+  }
+  {  // ATOK
+    KeyMapManager manager(GetDefaultConfig(config::Config::ATOK));
+    KeyParser::ParseKey("Shift Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT_RAW);
+  }
+  {  // KOTOERI
+    KeyMapManager manager(GetDefaultConfig(config::Config::KOTOERI));
+    KeyParser::ParseKey("Shift Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT_RAW);
+  }
+  {  // CHROMEOS
+    KeyMapManager manager(GetDefaultConfig(config::Config::CHROMEOS));
+    KeyParser::ParseKey("Shift Enter", &key_event);
+    EXPECT_TRUE(manager.GetCommandSuggestion(key_event, &command));
+    EXPECT_EQ(command, CompositionState::COMMIT_RAW);
+  }
+}
+
 TEST_F(KeyMapTest, CapsLock) {
   // MSIME
   KeyMapManager manager(GetDefaultConfig(config::Config::MSIME));

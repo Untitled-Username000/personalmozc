@@ -118,6 +118,8 @@ struct CompositionState {
     MOVE_CURSOR_TO_BEGINNING,
     MOVE_MOVE_CURSOR_TO_END,
     COMMIT,                   // Move to Precomposition status.
+    // Commit the composition without consulting any suggestion or candidate.
+    COMMIT_RAW,
     COMMIT_FIRST_SUGGESTION,  // ATOK's Shift-Enter style
     CONVERT,                  // Move to Conversion status.
     CONVERT_WITHOUT_HISTORY,  // Move to Conversion status.

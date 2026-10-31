@@ -40,7 +40,6 @@ MODULE.bazel.lock
 .vscode/
 
 # Agentic Project Management session files
-/.apm/
 
 # Temporary working dirs
 /oss

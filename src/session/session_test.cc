@@ -4300,11 +4300,16 @@ TEST_F(SessionTest, EnterCommitsFocusedSuggestionAfterNavigation) {
   commands::Command command;
   InsertCharacterChars("aiueo", &session, &command);
   ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
 
   // Down focuses the second candidate.
   command.Clear();
   EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::DOWN, &session, &command));
   ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
   EXPECT_EQ(command.output().candidate_window().focused_index(), 1);
 
   Segments committed_segments;
@@ -4341,11 +4346,16 @@ TEST_F(SessionTest, EnterCommitsFocusedSuggestionOnSecondPage) {
   commands::Command command;
   InsertCharacterChars("aiueo", &session, &command);
   ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
 
   // Move the focus to the beginning of the second page.
   command.Clear();
   EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::PAGE_DOWN, &session, &command));
   ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
   EXPECT_EQ(command.output().candidate_window().focused_index(), 9);
 
   // Enter commits the focused candidate on the current page ("候補8").
@@ -4385,12 +4395,105 @@ TEST_F(SessionTest, EnterCommitsRawCompositionForAlphanumericInput) {
   ASSERT_TRUE(command.output().has_candidate_window());
   EXPECT_EQ(command.output().candidate_window().category(),
             commands::PREDICTION);
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
 
   // Enter keeps committing the raw composition for alphanumeric input.
   command.Clear();
   EXPECT_TRUE(SendKey("Enter", &session, &command));
   EXPECT_TRUE(command.output().consumed());
   EXPECT_RESULT("A", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, ShiftEnterCommitsRawCompositionForAlphanumericInput) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("A");
+    converter::Candidate* candidate = segment->add_candidate();
+    candidate->value = "Ａ";
+    candidate->content_key = "Ａ";
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  EXPECT_TRUE(SendKey("A", &session, &command));
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
+
+  // Shift+Enter also keeps committing the raw composition for alphanumeric
+  // input.
+  command.Clear();
+  EXPECT_TRUE(SendKey("Shift Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("A", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, ShiftEnterCommitsRawCompositionWhileTyping) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  Segments segments;
+  {
+    Segment* segment = segments.add_segment();
+    segment->set_key("あいうえお");
+    for (const char* value : {"候補0", "候補1", "候補2"}) {
+      converter::Candidate* candidate = segment->add_candidate();
+      candidate->key = "あいうえお";
+      candidate->content_key = "あいうえお";
+      candidate->value = value;
+    }
+  }
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .WillRepeatedly(DoAll(SetArgPointee<1>(segments), Return(true)));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().category(),
+            commands::PREDICTION);
+  EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
+
+  // Shift+Enter commits the raw composition, not the focused candidate.
+  command.Clear();
+  EXPECT_TRUE(SendKey("Shift Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("あいうえお", command);
+  EXPECT_TRUE(GetComposition(command).empty());
+}
+
+TEST_F(SessionTest, EnterCommitsRawCompositionWithoutCandidateWindow) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+
+  EXPECT_CALL(*converter, StartPrediction(_, _)).WillRepeatedly(Return(false));
+
+  commands::Command command;
+  InsertCharacterChars("aiueo", &session, &command);
+  EXPECT_EQ(GetComposition(command), "あいうえお");
+  EXPECT_FALSE(command.output().has_candidate_window());
+
+  // Enter commits the raw composition when no candidate menu is displayed.
+  command.Clear();
+  EXPECT_TRUE(SendKey("Enter", &session, &command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_RESULT("あいうえお", command);
   EXPECT_TRUE(GetComposition(command).empty());
 }
 
